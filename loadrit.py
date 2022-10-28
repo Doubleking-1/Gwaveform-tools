@@ -1,5 +1,7 @@
 import lal,romspline
 from pycbc.types import TimeSeries
+import glob,os,json
+import numpy as np
 
 class RITwave(object):
     '''

@@ -5,8 +5,38 @@ from pycbc.waveform import get_td_waveform,td_taper,apply_fd_time_shift
 from pycbc.psd import aLIGOZeroDetHighPower
 from pycbc.filter import match,matched_filter
 
-import json,os,glob
+import lal,json,os,glob,numpy as np
 from tqdm import tqdm
+
+from .utils import get_parameter
+from .loadrit import RITwave
+
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+mpl.use('Agg')
+# PLOTTING OPTIONS
+fig_width_pt = 3*246.0  # Get this from LaTeX using \showthe\columnwidth
+inches_per_pt = 1.0/72.27               # Convert pt to inch
+golden_mean = (np.sqrt(5)-1.0)/2.0         # Aesthetic ratio
+fig_width = fig_width_pt*inches_per_pt  # width in inches
+fig_height = fig_width*golden_mean      # height in inches
+fig_size =  [fig_width,fig_height]
+
+params = { 'axes.labelsize': 24,
+          'font.family': 'serif',
+          'font.serif': 'Computer Modern Raman',
+          'font.size': 24,
+          'legend.fontsize': 20,
+          'xtick.labelsize': 24,
+          'ytick.labelsize': 24,
+          'axes.grid' : True,
+          'text.usetex': True,
+          'savefig.dpi' : 100,
+          'lines.markersize' : 14,
+          'figure.figsize': fig_size}
+
+mpl.rcParams.update(params)
 
 def get_psd(seob,nr,start_frequency=15):
     '''
@@ -159,12 +189,75 @@ def max_overlap_over_ecc(mtotal,nr_class,ecc_upper=0.4):
     overlap = -1*_target(res.x)
     return ecc,overlap
 
+def plot_overlap_vs_mtotal(mtotal,overlap,ecc,nr,output_prefix):
+    '''
+    
+    Parameters
+    ----------
+    mtotal: numpy.array
+    
+    overlap: numpy.array
+    
+    output_prefix: str
+    '''
+    fig = plt.figure(figsize=([16,16]))
+    ax = fig.add_subplot(221)
+    ax.plot(mtotal,overlap,'o-')
+    ax.set_xlabel('Total mass / $M_\odot$')
+    ax.set_ylabel('Overlap')
+    
+    q = float(nr.metadata['relaxed-mass-ratio-1-over-2'])
+    if q<1:
+        q = 1/q
+    nr_e = float(nr.metadata['eccentricity'])
+    chi1z = float(nr.metadata['initial-bh-chi1z'])
+    chi2z = float(nr.metadata['initial-bh-chi2z'])
+    
+    ii = np.nanargmax(overlap)
+    seob_valid,nr_valid = get_overlap(ecc[ii],mtotal[ii],nr,taper_fraction=0.1,validation=True)
+    bx = fig.add_subplot(222)
+    bx.plot(seob_valid.sample_times,seob_valid,label='SEOBNREHM-shift')
+    bx.plot(nr_valid.sample_times,nr_valid,label='RIT:'+str(nr.id))
+    bx.set_xlabel('Time / s')
+    bx.set_ylabel('Strain')
+    bx.legend()
+    bx.set_title('Overlap:{%.4f}' % overlap[ii]+', mtotal:' +str(mtotal[ii])+', q:{%.2f}' % q+', chi1z:{%.1f}' % chi1z +', chi2z:{%.1f}' % chi2z+
+                 '\n NRecc:{%.4f}' % nr_e +', eobecc:{%.4f}' % ecc[ii],fontsize=16)
+    
+    cx = fig.add_subplot(223)
+    cx.plot(seob_valid.sample_times,seob_valid,label='SEOBNREHM-shift')
+    cx.plot(nr_valid.sample_times,nr_valid,label='RIT:'+str(nr.id))
+    cx.set_xlabel('Time / s')
+    cx.set_ylabel('Strain')
+    cx.set_xlim(-0.1,0.05)
+    cx.legend()
+    cx.set_title('Zoom in',fontsize=20)
+    
+    dx = fig.add_subplot(224)
+    seob_f = seob_valid.to_frequencyseries()
+    nr_f = nr_valid.to_frequencyseries()
+    dx.loglog(seob_f.sample_frequencies,np.abs(seob_f),label='SEOBNREHM')
+    dx.loglog(nr_f.sample_frequencies,np.abs(nr_f),label='RIT:'+str(nr.id))
+    dx.axvline(float(nr.metadata['freq-start-22-Hz-1Msun'])/mtotal[ii],ls='--',color='gray',label='NR fstart 22')
+    dx.legend()
+    dx.set_xlabel('Frequency / Hz')
+    dx.set_ylabel('$|h_+|$',fontsize=18)
+    
+    #create output folder
+    if not os.path.exists(output_prefix):
+        os.makedirs(output_prefix)
+        
+    fig.savefig(output_prefix+'/RIT-'+str(nr.id)+'.pdf',bbox_inches='tight')
+    
 def max_overlap_over_mtotal(nrid,mtotal = np.arange(20,200,5),
                          output_prefix='/work/yifan.wang/eccentricity/gitlab-summer-internship/results/'):
     ecc_list = []
     overlap_list = []
     
     nr = RITwave(nrid)
+    
+    if isinstance(mtotal,int) or isinstance(mtotal,float):
+        mtotal = [mtotal]
     
     for m in tqdm(mtotal):
         ecc,overlap = max_overlap_over_ecc(m,nr)
@@ -175,8 +268,8 @@ def max_overlap_over_mtotal(nrid,mtotal = np.arange(20,200,5),
     if not os.path.exists(output_prefix):
         os.makedirs(output_prefix)
     
-    output_fn = output_prefix + '/overlap-RITid-'+str(nrid)+'.txt'
+    output_fn = output_prefix + '/overlap-RITid-'+str(nr.id)+'.txt'
     np.savetxt(output_fn,np.transpose([mtotal,ecc_list,overlap_list]),
                fmt='%.1f %.8f %.8f',header='mtotal ecc overlap')
-    plot_overlap_vs_mtotal(nrid,mtotal,overlap_list,ecc_list,nr,
+    plot_overlap_vs_mtotal(mtotal,overlap_list,ecc_list,nr,
                        output_prefix + '/fig/')

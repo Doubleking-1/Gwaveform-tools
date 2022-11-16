@@ -42,6 +42,19 @@ class sxswave(object):
         return TimeSeries(h.data, delta_t = dt,
                           epoch = -dt * np.argmax(np.abs(h.data)))
     
+    def hp_m_ihc_phyunit(self):
+        '''
+        h22
+        '''
+        t_start = self.h22.t[0]
+        t_end = self.h22.t[-1]
+        dt = np.max(np.diff(self.h22.t))
+        #uniform time to interpolate
+        t_uniform = np.arange(t_start, t_end, dt)
+        h = self.h22.interpolate(t_uniform)
+        return TimeSeries(h.data, delta_t = dt,
+                          epoch = -dt * np.argmax(np.abs(h.data)))
+    
     def hp_pycbcts_phyunit(self,**kwargs):
         '''
         

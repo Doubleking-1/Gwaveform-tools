@@ -29,6 +29,7 @@ class RITwave(object):
             raise FileNotFoundError
    
         self.modes = modes
+        self.id = waveid
         
     def get_single_mode(self,mode):
         '''
@@ -82,6 +83,37 @@ class RITwave(object):
         '''
         h = self.get_single_mode([2,2])
         return h
+    
+    def hp_m_ihc_phyunit(self,**kwargs):
+        '''
+        h_+-ih_x in physical unit
+        
+        Parameters
+        -----------
+        kwargs: dict
+            A dictionary of waveform parameter, including mass1,
+            mass2,distance,inclination,coa_phase
+            
+        Return
+        -----------
+        hplus: pycbc.types.TimeSeries
+            A time domain series of h_+ from (2,2) mode.
+        '''
+        mtotal = kwargs['mass1'] + kwargs['mass2']
+        distance = kwargs['distance']
+        inclination = kwargs['inclination']
+        coa_phase = kwargs['coa_phase']
+        
+        amp_factor = distance*1e6*lal.PC_SI / mtotal /lal.MRSUN_SI
+        time_factor = 1/ mtotal /lal.MTSUN_SI
+        
+        h22 = self.h22()
+        Y_22 = lal.SpinWeightedSphericalHarmonic(inclination, coa_phase, -2, l=2, m=2)
+        #h_+ - ih_x = h_22 * -2Y_22
+        hp_m_ihc = h22.data * Y_22
+        dt = h22.delta_t
+        return TimeSeries( hp_m_ihc / amp_factor,delta_t = dt / time_factor,\
+                          epoch = - dt * np.argmax(np.abs(hp_m_ihc)) / time_factor)
     
     def hp22_phyunit(self,**kwargs):
         '''
